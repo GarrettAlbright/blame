@@ -1,0 +1,21 @@
+This file is meant to be a running list of tasks, questions or concerns
+that are still pending as the development of this module continues.
+
+Questions / Thoughts / Ideas:
+
+1. Currently, in order to administer the blame module, you need to have the
+   permission "administer site configuration". I'm wondering if it would be
+   more appropriate to have a custom permission from the blame module for this,
+   or if a user with the "administer site configuration" should be fine.
+2. Every time a form is submitted, a couple of things are definitely going to
+   change. For example, the [changed] timestamp will of course change, and the
+   [form_build_id] will always change. I'm wondering if it would be best to 
+   withhold these fields from output since it will always be different? Or
+   maybe this would be something to allow an admin to turn on or off at their
+   discretion from the modules settings?
+
+TODO's:
+
+1. When a diff is performed on a record set, the module currently highlights
+   the entire field that was changed. It would be nice to actually highlight
+   the specific change for quicker identification.

@@ -1,0 +1,478 @@
+<?php
+// $Id$
+
+/**
+ * The blame.module is a tracking module that captures every single form
+ * submit that happens in the CMS. It can be configured through the modules
+ * admin settings to only track specific roles AND / OR accounts as desired.
+ * 
+ * Specifically, this module takes all of the form fields from the submitted 
+ * form, serializes the data and logs the information to the database with 
+ * additional details (like user id, the time, the form id, etc) so that 
+ * details can quickly and easily be traced back. Additionally, the blame.module
+ * will run a diff on previously submitted forms to identify which items in the
+ * form where changed from the last time it was tracked.
+ */
+
+/**
+ * Implementation of hook_menu()
+ */
+function blame_menu() {
+  $items = array();
+  
+  $items['admin/settings/blame'] = array(
+    'title' => 'Blame Settings',
+    'description' => 'Blame module settings and configuration.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('blame_settings_form'),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer site configuration'),
+    'file' => 'blame.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items['admin/content/blame'] = array(
+    'title' => 'Blame',
+    'page callback' => 'blame_page',
+    'access callback' => 'user_access',
+    'access arguments' => array('view blame records'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items['admin/content/blame/record/%'] = array(
+    'title' => 'Blame Record',
+    'page callback' => 'blame_record_page',
+    'page arguments' => array(4),
+    'access callback' => 'user_access',
+    'access arguments' => array('view blame records'),
+    'type' => MENU_CALLBACK,
+    );
+    
+  return $items;
+}
+
+/**
+ * Implementation of hook_perm()
+ */
+function blame_perm() {
+  return array(
+    'view blame records'
+  );
+}
+
+/**
+ * Menu callback function that handles setting up and displaying an
+ * individual blame record and all of its details.
+ * 
+ * @param int $bid - The Blame id which is the auto incremement id
+ *  in the database.
+ * 
+ * @return - The HTML output for display to the page.
+ */
+function blame_record_page($bid) {
+  $record = blame_get_record($bid);
+  $output = theme('blame_single_record', $record);
+  return $output;  
+}
+
+/**
+ * Assistant function that fetches / queries the database for
+ * all (or some) of the blame records stored to the blame table.
+ * 
+ * @param <array> $customize - You can pass in an array of custom
+ * elements to control what this function returns. Here is a
+ * list of available key => values that this array can contain:
+ * 		['from'] => A unix timestamp of the first record to return, starting from.
+ * 		['to'] => A unix timestamp of the last record to return after ['from'].
+ */
+function blame_get_records($customize = array()) {  
+  // Lets set up our 'to' and 'from' times here if they are available 
+  // to us. We'll set a blank value for this variable by default since its
+  // going to live in the query, but if the data is there, then we'll go
+  // ahead and override the values. Remember, BOTH of the 'to' and 'from'
+  // fields have to have values for this to work.
+  $between = '';
+  if (!empty($customize['from']) && !empty($customize['to'])) {
+    $between = "b.from >= {$customize['from']} AND b.to <= {$customize['to']}";
+  }
+  
+  // TODO: This section doesn't make the most since to me yet and I really want
+  // to come back and re-vamp this. The logic here is that we check to see if
+  // any specific variables are set before we thrown in a WHERE clause. This
+  // could be done a bit cleaner and needs some code love.
+  if ($between != '') {
+    $where = "WHERE {$between}";
+  }
+  
+  $data = array();
+  $query = pager_query("SELECT b.*, u.name 
+    FROM {blame} b
+    INNER JOIN {users} u ON u.uid = b.uid
+    $where
+    ORDER BY b.created DESC", 25);
+  while ($result = db_fetch_array($query)) {
+    $data[] = $result;
+  }
+  return $data;
+}
+
+/**
+ * Assistant function to get an individual record from the database.
+ * 
+ * @param int $bid - The Blame bid from the database.
+ * 
+ * @return - An array containing all of the fields from the query.
+ */
+function blame_get_record($bid) {
+  $result = db_fetch_array(db_query("SELECT b.*, u.name
+    FROM {blame} b
+    INNER JOIN {users} u ON u.uid = b.uid
+    WHERE b.bid = %d", $bid));
+  return $result;
+}
+/**
+ * Menu callback function that is in charge of displaying data for all blame
+ * records in the system. It calls for all of the blame records stored and
+ * passes the result set off to the correct theme function for rendering.
+ */
+function blame_page() {
+  $blame_records = blame_get_records();
+  $output = theme('blame_records', $blame_records);
+  return $output;
+}
+
+/**
+ * Theme function that themes the listing of all blame records in the database.
+ */
+function theme_blame_records($blame_records) {
+  $output = '';
+  if (is_array($blame_records) && $blame_records) {
+    $header = array(
+      'uid',
+      'name',
+      'form_id',
+      'created',
+      'data',
+    );
+    $rows = array();
+    foreach ($blame_records as $record) {
+      $rows[] = array(
+        $record['uid'],
+        l($record['name'], 'user/'. $record['uid']),
+        $record['form_id'],
+        date('m/d/Y g:ia', $record['created']),
+        l('View Data For This Entry', 'admin/content/blame/record/'. $record['bid']),        
+        );
+    }
+    $output.= theme('table', $header, $rows);
+    $output.= theme('pager');
+  }
+  else {
+    $output = 'There are currently no records that have been blamed. Recrods
+      will show up on this page once a form has been submitted which has not
+      been disabled in the blame module settings.';
+  }
+  
+  return $output;
+}
+
+
+/**
+ * Theme function that themes an individual record from the database.
+ */
+function theme_blame_single_record($record) {
+  $output = l('<< Back To All Blame Results', 'admin/content/blame');
+  $header = array(
+    'uid',
+    'name',
+    'form_id',
+    'created',
+    'form values',
+  );
+  $rows = array();
+  $rows[] = array(
+    array('data' => $record['uid'], 'valign' => 'top'),
+    array('data' => l($record['name'], 'user/'. $record['uid']), 'valign' => 'top'),
+    array('data' => $record['form_id'], 'valign' => 'top'),
+    array('data' => date('m/d/Y g:ia', $record['created']), 'valign' => 'top'),
+    array('data' => theme('blame_form_values', $record), 'valign' => 'top'),
+  );
+  $output.= theme('table', $header, $rows);
+  $output.= theme('pager');
+  
+  return $output;
+}
+
+/**
+ * Implementation of hook_theme()
+ */
+function blame_theme() {
+  return array(
+    'blame_records' => array(
+      'arguments' => array('blame_records' => NULL),
+    ),
+    'blame_single_record' => array(
+      'arguments' => array('record' => NULL),
+    ),
+    'blame_form_values' => array(
+      'arguments' => array('form_values' => NULL),
+    ),
+  );
+}
+
+/**
+ * Theme function that themes the output of the form values field when viewing
+ * the blame of a form. Its purpose to highlight any diffs that may exist, 
+ * layout the output in a readable format, etc. Its been placed here inside of
+ * a theme function so the end user has the ability to override this output
+ * if they so desire to.
+ * 
+ * @param <array> $results - All of the values returned from the database that
+ *  were extraced from the database for the record being viewed.
+ *
+ * @return - The themed HTML markup to be rendered to the page.
+ */
+function theme_blame_form_values($results) {
+  $data = unserialize($results['data']);
+  $changes = unserialize($results['changes']);
+  $output = '';
+  // Bascially, if there is a value in $results['changes'] and that value
+  // is in array when unserialized, then we want to wrap each one of those
+  // values inside $results['data'] with a special style so its highlighted
+  // when the view is viewing the output here. However, if nothing is inside
+  // of $results['changes'], then we do nothing other that print out the
+  // results of $results['data'];
+  if (is_array($changes) && !empty($changes)) {
+    $output.= '<strong>The following form items have changed:</strong>';
+    $output.= '<pre style="background-color: yellow;">'. print_r($changes, 1) .'</pre>';
+  }
+
+  $output.= '<strong>The entire form submitted:</strong>';
+  $output.= '<pre>'. print_r($data, 1) .'</pre>';
+
+  return $output;
+}
+
+
+/**
+ * Implementation of hook_form_alter()
+ */
+function blame_form_alter(&$form, &$form_state, $form_id) {  
+  // Here we want to load in the settings to see if we're going to move
+  // forward with doing the tracking for this form. The function call to
+  // blame_do_blame will determine whether or not, based on the settings
+  // for this module, tracking for this form should be done. The value will
+  // be bool true / false, true confirming that we want to track, false
+  // confirming that we should not track.   
+  $do_blame = blame_do_blame(FALSE, $form_id);
+  
+  // If the value of $do_blame is true, then we go about setting up the
+  // new submit function thats going to capture all of our data as soon
+  // as this form is submitted. 
+  if ($do_blame) {
+    $form['#submit'] = array_merge(array('blame_form_submit'), (array)$form['#submit']);
+  }  
+}
+
+/**
+ * Implementation of hook_submit()
+ */
+function blame_form_submit($form, &$form_state) {
+  global $user;
+
+  // The first part of this submit function is to do a match to find the diff's of
+  // this form from the previously submitted form. Hand this off to the function
+  // blame_diff() which will do everything that we need and return the values
+  // back which we are going to serialize and store.
+  $submitted_form = $form_state['values'];
+  $diff_results = blame_diff($submitted_form['form_id'], $submitted_form);
+
+  // At this level, we want to set up all of the data that is going to
+  // be captured for this form and inserted into the database.
+  $uid = $user->uid;
+  $form_id = $form_state['values']['form_id'];
+  $created = time();
+  $data = serialize($diff_results['values']);
+  $changes = serialize($diff_results['changes']);
+  
+  // Now lets take the variables that we've set up which has all of our form
+  // data and attempt to write it to the database. If it fails for any reason,
+  // we're being sure to log it to watchdog so we're aware of it.
+  if (!db_query("INSERT INTO {blame} 
+    (`uid`, `form_id`, `created`, `data`, `changes`)
+    VALUES (%d, '%s', %d, '%s', '%s')",
+    $uid, $form_id, $created, $data, $changes)) {
+    watchdog('blame', 'There was a problem storing a record into the database for a form that was just submitted.');
+  }
+}
+
+/**
+ * This function tries to fetch the most recent submitted form based on the
+ * form_id passed in. If it finds a value, it diffs the results between the
+ * results found and the results passed in form_values and marks the values in
+ * special wrappers so the blame module knows to highlight the diffs when the
+ * user is viewing the results in the blame admin. If it doesn't find a
+ * result set, it just returns the form_values passed in.
+ *
+ * @param <str> $form_id - The form id of the firm submitted.
+ * @param <array> $form_values - All the form values submitted from the form.
+ *
+ * @return <array> - All of the values from the form, either diffed or raw, that
+ *  are going to be saved back to the database. This array has been broken up
+ *  into specific keys containing specific sets of data:
+ *    [changes] - An array of all the changes only if any were found.
+ *    [values] - All of the form values from the form passed into the form.
+ */
+function blame_diff($form_id, $form_values) {
+  $diff = array();
+  $diff['values'] = $form_values;
+  $diff['changes'] = array();
+
+  // Query the database for the last record inserted into the database. The
+  // point of this is to give us something to diff against. 
+  $result = db_fetch_array(db_query("SELECT *
+    FROM {blame}
+    WHERE form_id = '%s'
+    ORDER BY created DESC
+    LIMIT 1", $form_id));
+
+  if (is_array($result) && !empty($result['data'])) {
+    $data = unserialize($result['data']);
+    // The $data variable holds all of the form data from the last time this
+    // exact form was submitted. The $form_values variable contains all of the
+    // form data from the form that was just submitted. We're going to do a
+    // compair against the two record sets and find out what, if anything,
+    // has changed.
+    $diff['changes'] = array_diff($form_values, $data);
+
+    // -----------------------------------------------------------------------
+    // TODO: It would really be awesome if we could drill in a bit further.
+    // For example, the [body] field can be a really large set of data on
+    // certain sites. It would be great to not only identify that there was a
+    // change to the field, but to actually highlight the change itself.
+    // -----------------------------------------------------------------------
+  }
+
+  return $diff;
+}
+
+/**
+ * Function that determines whether or not we can go about doing a blame
+ * based on the data passed in. For example, if the user role of the current
+ * user is not checked as a role that the site administrator wants to track,
+ * then we do not want to continue doing a blame and this function would return
+ * FALSE in that specific case.
+ * 
+ * However, lets assume that the current user has a role in its role list that
+ * has in fact been checked for blaming, this module would return TRUE because
+ * it does in fact want to blame the current user.
+ * 
+ * @param <int> $uid - Optional uid that can be passed in to check a specific
+ * 		user. The default global $user is used in all other cases.
+ * 
+ * @return bool - TRUE if the condition allow for blaming, FALSE if not.
+ */
+function blame_do_blame($uid = FALSE, $form_id = NULL) {
+  global $user;
+  $account = $user;
+  
+  // Load the admin settings that have been set up for this module. We will use
+  // these settings to match against the user we're checking against in order
+  // to determine if this module does or does not blame fpr this case.
+  $admin_settings = blame_get_admin_settings();
+  
+  // Determine who we're using as a user. If a $uid is passed into this function,
+  // that is going to become our user. If not, then the global $user object is
+  // going to be used instead.
+  if ($uid) {
+    $account = user_load($uid);
+  }
+  
+  // Now that we have our settings and our user, we're ready to start doing some
+  // checking against the variables set from our admin settings form. We're going
+  // to start from the top and work our way down.
+  // ---------------------------------------------------------------------------
+  // ROLES: - Checks which roles have been set to be blamed.
+  // ---------------------------------------------------------------------------
+  $blame_roles = $admin_settings['blame_roles'];
+  if (is_array($blame_roles) && is_array($account->roles) && $account->uid != 1) {
+    // Lets iterate through each of the user roles for the current
+    // user and check to see if its in the list of turned on roles.
+    foreach ($account->roles as $key => $account_role) {
+      if (!in_array($key, $blame_roles)) {
+        return FALSE;
+      }
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // ADMIN UID: - Check to see if the uid is 1 and if they can continue.
+  // ---------------------------------------------------------------------------
+  if ($account->uid == 1 && $admin_settings['blame_no_admin']) {
+    return FALSE;
+  }
+  
+  // ---------------------------------------------------------------------------
+  // UID's: - Check to see if the current user has been set in the list of UID's
+  // ---------------------------------------------------------------------------
+  if ($admin_settings['blame_uids'] != '') {
+    // The uid's here are seperated by commas, so we need to do an explode on
+    // the results, as well as a trim to clean-up whitespace.
+    $custom_uids = explode(",", trim($admin_settings['blame_uids']));
+    if (is_array($custom_uids)) {
+      // Iterate through the list of UIDs that have been set and check each
+      // one against the current user's uid. If a match is found, return FALSE.
+      foreach ($custom_uids as $custom_uid) {
+        if ($custom_uid == $user->uid) {
+          return FALSE;
+        }
+      }
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // EXCLUDE FORM IDS: - Check to see if their are excluded form ids.
+  // ---------------------------------------------------------------------------
+  if ($admin_settings['blame_exclude_form_ids']) {
+    $form_ids = explode("\n", trim($admin_settings['blame_exclude_form_ids']));
+    if (is_array($form_ids)) {
+      foreach ($form_ids as $id) { 
+        if ($id == $form_id) {
+          return FALSE;
+        }
+      }
+    }
+  }
+  
+  return TRUE;
+}
+
+/**
+ * Function that loads all of the admin settings from the admin settings
+ * form and returns them as an array back to the function asking for it.
+ * 
+ * @return array - All of the values stored from the admin settings form.
+ */
+function blame_get_admin_settings() {
+  // Build an array of all of the varilables that we want to fetch from drupal.
+  // Currently this is not controlled by the admin, which I don't think ever
+  // needs to be. As more variables are added or changed, this function will
+  // reflect those changes to the correct variables are loaded each time.
+  $variables = array(
+    'blame_roles',
+    'blame_no_admin',
+    'blame_uids',
+    'blame_exclude_form_ids',
+  );
+  
+  // Iterate through all of the $variables and do a variable_get() function
+  // call on each one. Set the key => value pair up for the results.
+  $return = array();
+  foreach ($variables as $var) {
+    $return[$var] = variable_get($var, 0);
+  }
+  
+  // Return the $return varaible which contains the key => value pairs of the
+  // admin settings and their values.
+  return $return;
+}
