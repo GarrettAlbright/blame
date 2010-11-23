@@ -14,6 +14,11 @@
  * form where changed from the last time it was tracked.
  */
 
+// Define the base path that blame reports live at in case this needs to change
+// down the road.
+define('BLAME_REPORT_BASE_PATH', "admin/reports/blame");
+
+
 /**
  * Implementation of hook_menu()
  */
@@ -31,7 +36,7 @@ function blame_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
   
-  $items['admin/content/blame'] = array(
+  $items[BLAME_REPORT_BASE_PATH] = array(
     'title' => 'Blame',
     'page callback' => 'blame_page',
     'access callback' => 'user_access',
@@ -39,7 +44,7 @@ function blame_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
   
-  $items['admin/content/blame/record/%'] = array(
+  $items[BLAME_REPORT_BASE_PATH .'/record/%'] = array(
     'title' => 'Blame Record',
     'page callback' => 'blame_record_page',
     'page arguments' => array(4),
@@ -161,7 +166,7 @@ function theme_blame_records($blame_records) {
         l($record['name'], 'user/'. $record['uid']),
         $record['form_id'],
         date('m/d/Y g:ia', $record['created']),
-        l('View Data For This Entry', 'admin/content/blame/record/'. $record['bid']),        
+        l('View Data For This Entry', BLAME_REPORT_BASE_PATH .'/record/'. $record['bid']),
         );
     }
     $output.= theme('table', $header, $rows);
@@ -181,7 +186,7 @@ function theme_blame_records($blame_records) {
  * Theme function that themes an individual record from the database.
  */
 function theme_blame_single_record($record) {
-  $output = l('<< Back To All Blame Results', 'admin/content/blame');
+  $output = l('<< Back To All Blame Results', BLAME_REPORT_BASE_PATH);
   $header = array(
     'uid',
     'name',
