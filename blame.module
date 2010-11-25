@@ -69,7 +69,7 @@ function blame_perm() {
  * Menu callback function that handles setting up and displaying an
  * individual blame record and all of its details.
  * 
- * @param int $bid - The Blame id which is the auto incremement id
+ * @param int $bid - The Blame id which is the auto increment id
  *  in the database.
  * 
  * @return - The HTML output for display to the page.
@@ -173,7 +173,7 @@ function theme_blame_records($blame_records) {
     $output.= theme('pager');
   }
   else {
-    $output = 'There are currently no records that have been blamed. Recrods
+    $output = 'There are currently no records that have been blamed. Records
       will show up on this page once a form has been submitted which has not
       been disabled in the blame module settings.';
   }
@@ -233,7 +233,7 @@ function blame_theme() {
  * if they so desire to.
  * 
  * @param <array> $results - All of the values returned from the database that
- *  were extraced from the database for the record being viewed.
+ *  were extracted from the database for the record being viewed.
  *
  * @return - The themed HTML markup to be rendered to the page.
  */
@@ -241,7 +241,7 @@ function theme_blame_form_values($results) {
   $data = unserialize($results['data']);
   $changes = unserialize($results['changes']);
   $output = '';
-  // Bascially, if there is a value in $results['changes'] and that value
+  // Basically, if there is a value in $results['changes'] and that value
   // is in array when unserialized, then we want to wrap each one of those
   // values inside $results['data'] with a special style so its highlighted
   // when the view is viewing the output here. However, if nothing is inside
@@ -346,7 +346,7 @@ function blame_diff($form_id, $form_values) {
     // The $data variable holds all of the form data from the last time this
     // exact form was submitted. The $form_values variable contains all of the
     // form data from the form that was just submitted. We're going to do a
-    // compair against the two record sets and find out what, if anything,
+    // compare against the two record sets and find out what, if anything,
     // has changed.
     $diff['changes'] = array_diff($form_values, $data);
 
@@ -421,7 +421,7 @@ function blame_do_blame($uid = FALSE, $form_id = NULL) {
   // UID's: - Check to see if the current user has been set in the list of UID's
   // ---------------------------------------------------------------------------
   if ($admin_settings['blame_uids'] != '') {
-    // The uid's here are seperated by commas, so we need to do an explode on
+    // The uid's here are separated by commas, so we need to do an explode on
     // the results, as well as a trim to clean-up whitespace.
     $custom_uids = explode(",", trim($admin_settings['blame_uids']));
     if (is_array($custom_uids)) {
@@ -459,7 +459,7 @@ function blame_do_blame($uid = FALSE, $form_id = NULL) {
  * @return array - All of the values stored from the admin settings form.
  */
 function blame_get_admin_settings() {
-  // Build an array of all of the varilables that we want to fetch from drupal.
+  // Build an array of all of the variables that we want to fetch from drupal.
   // Currently this is not controlled by the admin, which I don't think ever
   // needs to be. As more variables are added or changed, this function will
   // reflect those changes to the correct variables are loaded each time.
@@ -477,7 +477,7 @@ function blame_get_admin_settings() {
     $return[$var] = variable_get($var, 0);
   }
   
-  // Return the $return varaible which contains the key => value pairs of the
+  // Return the $return variable which contains the key => value pairs of the
   // admin settings and their values.
   return $return;
 }

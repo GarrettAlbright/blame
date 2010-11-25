@@ -32,7 +32,7 @@ function blame_settings_form() {
     '#title' => 'Blame UID\'s',
     '#description' => 'You have the ability to track specific users based on 
       their UID if you would like to. Provide a list of UID\'s that you want to
-      track, seperated by commas. This will still use the above role settings
+      track, separated by commas. This will still use the above role settings
       and will only track the user if the user has one of the available roles
       checked above.',
     '#default_value' => variable_get('blame_uids', ''),
@@ -41,9 +41,9 @@ function blame_settings_form() {
   $form['blame_exclude_form_ids'] = array(
     '#type' => 'textarea',
     '#title' => 'Exclude Form Ids',
-    '#description' => 'You can exlude specific form ids if you would like to. 
+    '#description' => 'You can exclude specific form ids if you would like to.
       This can by done by adding a form id on each line. Each form id that you
-      enter will be exluded from tracking / blaming.',
+      enter will be excluded from tracking / blaming.',
     '#default_value' => variable_get('blame_exclude_form_ids', ''),
   );
   

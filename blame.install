@@ -42,7 +42,7 @@ function blame_schema() {
         'type' => 'text',
         'not null' => TRUE,
         'size' => 'normal',
-        'description' => 'The serialized changes from the previous submittion.',
+        'description' => 'The serialized changes from the previous submission.',
       ),
     ),
     'indexes' => array(
