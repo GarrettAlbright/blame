@@ -1,5 +1,4 @@
 <?php
-// $Id$
 
 /**
  * The blame.module is a tracking module that captures every single form

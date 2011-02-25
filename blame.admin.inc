@@ -1,5 +1,4 @@
 <?php
-// $Id$
 
 /**
  * Blame module admin settings form.

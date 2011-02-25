@@ -1,4 +1,3 @@
-; $Id$
 name = Blame
 description = Captures and stores form submits per user which provides the ability for admins to see a back log of form submits and field changes that specific users have made on the CMS.
 version = 6.x-1.0-BETA1
