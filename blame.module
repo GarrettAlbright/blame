@@ -13,18 +13,14 @@
  * form where changed from the last time it was tracked.
  */
 
-// Define the base path that blame reports live at in case this needs to change
-// down the road.
-define('BLAME_REPORT_BASE_PATH', "admin/reports/blame");
-
 
 /**
- * Implementation of hook_menu()
+ * Implements hook_menu().
  */
 function blame_menu() {
   $items = array();
   
-  $items['admin/settings/blame'] = array(
+  $items['admin/config/blame'] = array(
     'title' => 'Blame Settings',
     'description' => 'Blame module settings and configuration.',
     'page callback' => 'drupal_get_form',
@@ -35,7 +31,7 @@ function blame_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
   
-  $items[BLAME_REPORT_BASE_PATH] = array(
+  $items['admin/reports/blame'] = array(
     'title' => 'Blame',
     'page callback' => 'blame_page',
     'access callback' => 'user_access',
@@ -43,7 +39,7 @@ function blame_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
   
-  $items[BLAME_REPORT_BASE_PATH .'/record/%'] = array(
+  $items['admin/reports/blame/record/%'] = array(
     'title' => 'Blame Record',
     'page callback' => 'blame_record_page',
     'page arguments' => array(4),
@@ -56,11 +52,13 @@ function blame_menu() {
 }
 
 /**
- * Implementation of hook_perm()
+ * Implements hook_permission()
  */
 function blame_perm() {
   return array(
-    'view blame records'
+    'view blame records' => array(
+      'title' => t('View Blame records'),
+    ),
   );
 }
 
@@ -89,7 +87,14 @@ function blame_record_page($bid) {
  * 		['from'] => A unix timestamp of the first record to return, starting from.
  * 		['to'] => A unix timestamp of the last record to return after ['from'].
  */
-function blame_get_records($customize = array()) {  
+function blame_get_records($customize = array()) {
+  $query = db_select('blame', 'b')
+    ->extend('PagerDefault')
+    ->limit(25)
+    ->orderBy('b.created', 'DESC');
+  $query->innerJoin('users', 'u', 'u.uid = b.uid');
+  $query->fields('b')
+    ->fields('u', array('name'));
   // Lets set up our 'to' and 'from' times here if they are available 
   // to us. We'll set a blank value for this variable by default since its
   // going to live in the query, but if the data is there, then we'll go
@@ -97,26 +102,10 @@ function blame_get_records($customize = array()) {
   // fields have to have values for this to work.
   $between = '';
   if (!empty($customize['from']) && !empty($customize['to'])) {
-    $between = "b.from >= {$customize['from']} AND b.to <= {$customize['to']}";
+    $query->where('b.from >= :from', array(':from' => $customize['from']));
+    $query->where('b.to <= :to', array(':to' => $customize['too']));
   }
-  
-  // TODO: This section doesn't make the most since to me yet and I really want
-  // to come back and re-vamp this. The logic here is that we check to see if
-  // any specific variables are set before we thrown in a WHERE clause. This
-  // could be done a bit cleaner and needs some code love.
-  if ($between != '') {
-    $where = "WHERE {$between}";
-  }
-  
-  $data = array();
-  $query = pager_query("SELECT b.*, u.name 
-    FROM {blame} b
-    INNER JOIN {users} u ON u.uid = b.uid
-    $where
-    ORDER BY b.created DESC", 25);
-  while ($result = db_fetch_array($query)) {
-    $data[] = $result;
-  }
+  $data = $query->execute()->fetchAllAssoc('bid');
   return $data;
 }
 
@@ -128,11 +117,18 @@ function blame_get_records($customize = array()) {
  * @return - An array containing all of the fields from the query.
  */
 function blame_get_record($bid) {
+  $query = db_select('blame', 'b')
+    ->where('b.bid = :bid', array(':bid' => $bid));
+  $query->innerJoin('users', 'u', 'u.uid = b.uid');
+  $query->fields('b')
+    ->fields('u', array('name'));
+/*
   $result = db_fetch_array(db_query("SELECT b.*, u.name
     FROM {blame} b
     INNER JOIN {users} u ON u.uid = b.uid
     WHERE b.bid = %d", $bid));
-  return $result;
+*/
+  return $query->execute()->fetchAssoc();
 }
 /**
  * Menu callback function that is in charge of displaying data for all blame
@@ -161,22 +157,21 @@ function theme_blame_records($blame_records) {
     $rows = array();
     foreach ($blame_records as $record) {
       $rows[] = array(
-        $record['uid'],
-        l($record['name'], 'user/'. $record['uid']),
-        $record['form_id'],
-        date('m/d/Y g:ia', $record['created']),
-        l('View Data For This Entry', BLAME_REPORT_BASE_PATH .'/record/'. $record['bid']),
-        );
+        $record->uid,
+        l($record->name, 'user/' . $record->uid),
+        $record->form_id,
+        date('m/d/Y g:ia', $record->created),
+        l(t('View Data For This Entry'), 'admin/reports/blame/record/' . $record->bid),
+      );
     }
-    $output.= theme('table', $header, $rows);
+    $output.= theme('table', array('header' => $header, 'rows' => $rows));
     $output.= theme('pager');
   }
   else {
-    $output = 'There are currently no records that have been blamed. Records
+    $output = t('There are currently no records that have been blamed. Records
       will show up on this page once a form has been submitted which has not
-      been disabled in the blame module settings.';
+      been disabled in the blame module settings.');
   }
-  
   return $output;
 }
 
@@ -185,7 +180,7 @@ function theme_blame_records($blame_records) {
  * Theme function that themes an individual record from the database.
  */
 function theme_blame_single_record($record) {
-  $output = l('<< Back To All Blame Results', BLAME_REPORT_BASE_PATH);
+  $output = l(t('<< Back To All Blame Results'), 'admin/reports/blame');
   $header = array(
     'uid',
     'name',
@@ -196,13 +191,12 @@ function theme_blame_single_record($record) {
   $rows = array();
   $rows[] = array(
     array('data' => $record['uid'], 'valign' => 'top'),
-    array('data' => l($record['name'], 'user/'. $record['uid']), 'valign' => 'top'),
+    array('data' => l($record['name'], 'user/' . $record['uid']), 'valign' => 'top'),
     array('data' => $record['form_id'], 'valign' => 'top'),
     array('data' => date('m/d/Y g:ia', $record['created']), 'valign' => 'top'),
     array('data' => theme('blame_form_values', $record), 'valign' => 'top'),
   );
-  $output.= theme('table', $header, $rows);
-  $output.= theme('pager');
+  $output.= theme('table', array('header' => $header, 'rows' => $rows));
   
   return $output;
 }
@@ -247,12 +241,12 @@ function theme_blame_form_values($results) {
   // of $results['changes'], then we do nothing other that print out the
   // results of $results['data'];
   if (is_array($changes) && !empty($changes)) {
-    $output.= '<strong>The following form items have changed:</strong>';
+    $output.= '<strong>' . t('The following form items have changed:') . '</strong>';
     $output.= '<pre style="background-color: yellow;">'. print_r($changes, 1) .'</pre>';
   }
 
-  $output.= '<strong>The entire form submitted:</strong>';
-  $output.= '<pre>'. print_r($data, 1) .'</pre>';
+  $output.= '<strong>' . t('The entire form submitted:') . '</strong>';
+  $output.= '<pre>' . print_r($data, 1) . '</pre>';
 
   return $output;
 }
@@ -293,20 +287,19 @@ function blame_form_submit($form, &$form_state) {
 
   // At this level, we want to set up all of the data that is going to
   // be captured for this form and inserted into the database.
-  $uid = $user->uid;
-  $form_id = $form_state['values']['form_id'];
-  $created = time();
-  $data = serialize($diff_results['values']);
-  $changes = serialize($diff_results['changes']);
+  $record = array(
+    'uid' => $user->uid,
+    'form_id' => $form_state['values']['form_id'],
+    'created' => time(),
+    'data' => serialize($diff_results['values']),
+    'changes' => serialize($diff_results['changes']),
+  );
   
   // Now lets take the variables that we've set up which has all of our form
   // data and attempt to write it to the database. If it fails for any reason,
   // we're being sure to log it to watchdog so we're aware of it.
-  if (!db_query("INSERT INTO {blame} 
-    (`uid`, `form_id`, `created`, `data`, `changes`)
-    VALUES (%d, '%s', %d, '%s', '%s')",
-    $uid, $form_id, $created, $data, $changes)) {
-    watchdog('blame', 'There was a problem storing a record into the database for a form that was just submitted.');
+  if (!drupal_write_record('blame', $record)) {
+    watchdog('blame', t('There was a problem storing a record into the database for a form that was just submitted.'));
   }
 }
 
@@ -333,13 +326,14 @@ function blame_diff($form_id, $form_values) {
   $diff['changes'] = array();
 
   // Query the database for the last record inserted into the database. The
-  // point of this is to give us something to diff against. 
-  $result = db_fetch_array(db_query("SELECT *
-    FROM {blame}
-    WHERE form_id = '%s'
-    ORDER BY created DESC
-    LIMIT 1", $form_id));
-
+  // point of this is to give us something to diff against.
+  $query = db_select('blame', 'b')
+    ->fields('b');
+  $query->addExpression('form_id = :id', array(':id' => $form_id));
+  $query->orderBy('b.created', 'DESC')
+    ->range(0, 1);
+  $result = $query->execute()->fetchAssoc();
+  
   if (is_array($result) && !empty($result['data'])) {
     $data = unserialize($result['data']);
     // The $data variable holds all of the form data from the last time this

@@ -59,7 +59,6 @@ function blame_schema() {
  * Implementation of hook_install();
  */
 function blame_install() {
-  drupal_install_schema('blame');
   variable_set('blame_roles', array());
   variable_set('blame_no_admin', 0);
   variable_set('blame_uids', '');
@@ -70,7 +69,6 @@ function blame_install() {
  * Implementation of hook_uninstall();
  */
 function blame_uninstall() {
-  drupal_uninstall_schema('blame');
   variable_del('blame_roles');
   variable_del('blame_no_admin');
   variable_del('blame_uids');
